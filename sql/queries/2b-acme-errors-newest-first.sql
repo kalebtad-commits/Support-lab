@@ -4,4 +4,4 @@ From error_logs
 JOIN users on users.id= error_logs.user_id
 JOIN customers on customers.id = users.customer_id
 WHERE customers.company_name = 'Acme Logistics' 
-Order by error_logs.error_time Desc;
+Order by error_logs.logged_at Desc;
