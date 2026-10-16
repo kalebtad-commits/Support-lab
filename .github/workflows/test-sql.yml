@@ -30,7 +30,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f sql/seed.sql
       - name: Run every query
         run: |
-          for f in $(find sql -name "*.sql" ! -name schema.sql ! -name seed.sql | sort); do
+          find sql -name "*.sql" ! -name schema.sql ! -name seed.sql -print0 | sort -z | while IFS= read -r -d '' f; do
             echo "=== Running $f ==="
             psql -v ON_ERROR_STOP=1 -f "$f" || exit 1
           done
