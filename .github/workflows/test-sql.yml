@@ -1,0 +1,41 @@
+name: Test SQL queries
+on: [push, pull_request]
+jobs:
+  test-sql:
+    runs-on: ubuntu-latest
+services:
+  postgres:
+    image: postgres:16
+    env:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: support
+    ports:
+      - 5432:5432
+    options: >-
+      --health-cmd pg_isready
+      --health-interval 5s
+      --health-timeout 5s
+      --health-retries 10
+
+env:
+  PGHOST: localhost
+  PGUSER: postgres
+  PGPASSWORD: postgres
+  PGDATABASE: support
+
+steps:
+  - name: Get the repo files
+    uses: actions/checkout@v4
+
+  - name: Create the tables
+    run: psql -v ON_ERROR_STOP=1 -f sql/schema.sql
+
+  - name: Load the sample data
+    run: psql -v ON_ERROR_STOP=1 -f sql/seed.sql
+
+  - name: Run every query
+    run: |
+      for f in $(find sql -name "*.sql" ! -name schema.sql ! -name seed.sql | sort); do
+        echo "=== Running $f ==="
+        psql -v ON_ERROR_STOP=1 -f "$f" || exit 1
+      done
