@@ -1,0 +1,1 @@
+select * from error_logs where error_logs.request_id = '7f3a-91c2';
