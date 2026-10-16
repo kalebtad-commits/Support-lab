@@ -1,0 +1,70 @@
+name: Test new SQL queries
+on: [push]
+jobs:
+  test-sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: support
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: support
+    steps:
+      - name: Get the repo files
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create the tables
+        run: psql -v ON_ERROR_STOP=1 -f sql/schema.sql
+      - name: Load the sample data
+        run: psql -v ON_ERROR_STOP=1 -f sql/seed.sql
+      - name: Test only the queries added or changed in this commit
+        run: |
+          before="${{ github.event.before }}"
+          if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            find sql -name "*.sql" -print0 > files.txt
+          else
+            git diff --name-only -z --diff-filter=AMR "$before" "${{ github.sha }}" -- 'sql/*.sql' > files.txt
+          fi
+          failed=0
+          count=0
+          echo "## Queries tested in this commit" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Query file | Result | Rows returned |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          : > details.md
+          while IFS= read -r -d '' f; do
+            case "$(basename "$f")" in schema.sql|seed.sql) continue;; esac
+            count=$((count+1))
+            echo "=== Running $f ==="
+            if out=$(psql -v ON_ERROR_STOP=1 -f "$f" 2>&1); then
+              result="✅ Passed"
+              rows=$(echo "$out" | grep -oE '\([0-9]+ rows?\)' | tr '\n' ' ' || true)
+            else
+              result="❌ Failed"
+              rows="-"
+              failed=1
+            fi
+            echo "$out"
+            echo "| \`$f\` | $result | $rows |" >> "$GITHUB_STEP_SUMMARY"
+            { echo "<details><summary>$f</summary>"; echo ""; echo '```'; echo "$out"; echo '```'; echo "</details>"; echo ""; } >> details.md
+          done < files.txt
+          if [ "$count" -eq 0 ]; then
+            echo "| (no query files changed in this commit) | - | - |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Output" >> "$GITHUB_STEP_SUMMARY"
+          cat details.md >> "$GITHUB_STEP_SUMMARY"
+          exit $failed
