@@ -3,4 +3,4 @@ from orders
 join customers on customers.id= orders.customer_id
 left join payments on orders.id= payments.order_id
 Where payments.id is null
-order by payments.amount desc;
+order by orders.amount desc;
